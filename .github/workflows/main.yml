@@ -38,4 +38,4 @@ jobs:
 
       # Step 6: Update Lambda function code with the zipped package
       - name: Update Lambda function code
-        run: aws lambda update-function-code --function-name singlePageExecution --zip-file fileb://lambda.zip
+        run: aws lambda update-function-code --function-name paginatedExecution --zip-file fileb://lambda.zip
