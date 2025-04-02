@@ -25,7 +25,7 @@ const __dirname = dirname(__filename);
 
 
 
-app.get("/test",(req,res)=>{res.send("hello! world test");
+app.get("/test",(req,res)=>{res.send("hello! world test test");
 })
 
 // Initialize main OpenAPI backend
