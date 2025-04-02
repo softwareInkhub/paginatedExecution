@@ -8,7 +8,8 @@ import { dirname } from 'path';
 import yaml from 'js-yaml';
 import { v4 as uuidv4 } from 'uuid';
 import cors from 'cors'
- import { handlers as dynamodbHandlers } from './lib/dynamodb-handlers.js';
+import axios from 'axios';
+import { handlers as dynamodbHandlers } from './lib/dynamodb-handlers.js';
 import dotenv from 'dotenv';
 import { savePaginatedExecutionLogs } from './executionHandler.js';
 import serverless from 'serverless-http';
@@ -613,11 +614,11 @@ app.post('/execute/paginated', async (req, res) => {
   }
 });
 
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, '0.0.0.0', () => {
-//   console.log(`Server listening on port ${PORT}`);
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server listening on port ${PORT}`);
  
-// });
+});
 
 
-export const handler = serverless(app);
+// export const handler = serverless(app);
