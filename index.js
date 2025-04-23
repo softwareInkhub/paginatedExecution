@@ -43,12 +43,12 @@ const mainApi = new OpenAPIBackend({
       error: 'Not Found'
     }),
 
-     executeNamespacePaginatedRequest: async (c, req, res) => {
+    executeNamespacePaginatedRequest: async (c, req, res) => {
       console.log('\n=== PAGINATED REQUEST START ===');
       console.log('Request details:', {
         method: c.request.requestBody.method,
         url: c.request.requestBody.url,
-        maxIterations: c.request.requestBody.maxIterations || 10,
+        maxIterations: c.request.requestBody.maxIterations || null,
         queryParams: c.request.requestBody.queryParams,
         headers: c.request.requestBody.headers,
         tableName: c.request.requestBody.tableName,
@@ -58,13 +58,16 @@ const mainApi = new OpenAPIBackend({
       const { 
         method, 
         url, 
-        maxIterations = 10,
+        maxIterations: requestMaxIterations = null,
         queryParams = {}, 
         headers = {}, 
         body = null,
         tableName,
         saveData
       } = c.request.requestBody;
+
+      // Explicitly handle maxIterations to ensure null values are preserved
+      const maxIterations = requestMaxIterations;
 
       let currentUrl = url;
       let lastError = null;
@@ -236,6 +239,14 @@ const mainApi = new OpenAPIBackend({
                 return 'offset';
               }
 
+              // Check for empty response or no more items
+              if (!response.data || 
+                  (Array.isArray(response.data) && response.data.length === 0) ||
+                  (response.data.data && Array.isArray(response.data.data) && response.data.data.length === 0) ||
+                  (response.data.items && Array.isArray(response.data.items) && response.data.items.length === 0)) {
+                return 'end';
+              }
+
               return null;
             };
 
@@ -258,8 +269,18 @@ const mainApi = new OpenAPIBackend({
               return responseData.next_cursor || responseData.cursor || null;
             };
 
-            while (hasMorePages && pageCount <= maxIterations) {
+            // Set the current URL for pagination
+            let currentUrl = url;
+
+            // Main pagination loop - will run until no more pages or maxIterations is reached
+            while (hasMorePages && (maxIterations === null || pageCount <= maxIterations)) {
               console.log(`\n=== PAGE ${pageCount} START ===`);
+              console.log('Current pagination state:', {
+                pageCount,
+                maxIterations,
+                hasMorePages,
+                condition: maxIterations === null ? 'infinite' : `${pageCount} <= ${maxIterations}`
+              });
               
               // Build URL with query parameters
               const urlObj = new URL(currentUrl);
@@ -362,6 +383,9 @@ const mainApi = new OpenAPIBackend({
 
               // After processing each page's items
               if (currentPageItems.length > 0) {
+                // Update total items processed
+                totalItemsProcessed += currentPageItems.length;
+                
                 // Save child execution log with the item IDs
                 await executionLogs.saveChildExecution({
                   pageNumber: pageCount,
@@ -370,9 +394,21 @@ const mainApi = new OpenAPIBackend({
                   url: urlObj.toString(),
                   status: response.status,
                   paginationType: detectedPaginationType || 'none',
-                  isLast: !hasMorePages || pageCount === maxIterations,
+                  isLast: !hasMorePages || (maxIterations !== null && pageCount === maxIterations),
                   itemIds: itemIds // Pass the extracted item IDs directly
                 });
+                
+                // Save items to DynamoDB if saveData is true
+                if (saveData && tableName) {
+                  console.log(`Attempting to save ${currentPageItems.length} items to DynamoDB...`);
+                  const pageData = {
+                    url: urlObj.toString(),
+                    status: response.status
+                  };
+                  
+                  const savedIds = await saveItemsToDynamoDB(currentPageItems, pageData);
+                  console.log(`Saved ${savedIds.length} items to DynamoDB`);
+                }
               }
 
               // Check for next page based on detected pagination type
@@ -426,6 +462,9 @@ const mainApi = new OpenAPIBackend({
                   currentUrl = urlObj.toString();
                   console.log('\nNext page offset:', currentOffset + limit);
                 }
+              } else if (detectedPaginationType === 'end') {
+                hasMorePages = false;
+                console.log('\nNo more pages (End):', `Page ${pageCount} is the last page`);
               } else {
                 hasMorePages = false;
                 console.log('\nNo pagination detected:', `Page ${pageCount} is the last page`);
